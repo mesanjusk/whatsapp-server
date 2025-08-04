@@ -26,7 +26,14 @@ const Message = mongoose.model("Message", messageSchema);
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server, { cors: { origin: "*" } });
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://whatsapp-panel-rho.vercel.app'
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

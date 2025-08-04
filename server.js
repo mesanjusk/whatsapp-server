@@ -26,10 +26,11 @@ const Message = mongoose.model("Message", messageSchema);
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server, { cors: { origin: "*" } });
+
 app.use(cors({
   origin: [
-    'http://localhost:3000',
-    'https://whatsapp-panel-rho.vercel.app'
+    "http://localhost:3000",
+    "https://whatsapp-panel-rho.vercel.app"
   ],
   credentials: true
 }));
@@ -46,20 +47,7 @@ async function setupWhatsApp(io, sessionId) {
   if (client) return;
 
   await mongoose.connection.asPromise();
-  const store = new MongoStore({ mongoose }); // ✅ No .init() here
-
-client = new Client({
-  authStrategy: new RemoteAuth({
-    store,
-    clientId: sessionId,
-    backupSyncIntervalMs: 300000,
-  }),
-  puppeteer: {
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
-});
-
+  const store = new MongoStore({ mongoose });
 
   client = new Client({
     authStrategy: new RemoteAuth({
@@ -70,7 +58,6 @@ client = new Client({
     puppeteer: {
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      // ❌ Do NOT use userDataDir here
     },
   });
 
@@ -86,6 +73,10 @@ client = new Client({
     }
   });
 
+  client.on("authenticated", () => {
+    console.log("✅ WhatsApp authenticated");
+  });
+
   client.on("ready", () => {
     isReady = true;
     latestQR = null;
@@ -93,13 +84,17 @@ client = new Client({
     console.log("✅ WhatsApp client is ready");
   });
 
-  client.on("authenticated", () => {
-    console.log("✅ WhatsApp authenticated");
-  });
-
   client.on("auth_failure", (msg) => {
     console.error("❌ Auth failure:", msg);
     io.emit("auth_failure", msg);
+  });
+
+  client.on("remote_session_saved", () => {
+    console.log("💾 Session successfully saved to MongoDB");
+  });
+
+  client.on("change_state", (state) => {
+    console.log("📶 Client state changed:", state);
   });
 
   client.on("message", async (msg) => {

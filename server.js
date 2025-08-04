@@ -46,8 +46,20 @@ async function setupWhatsApp(io, sessionId) {
   if (client) return;
 
   await mongoose.connection.asPromise();
-  const store = new MongoStore({ mongoose });
-  await store.init(); //
+  const store = new MongoStore({ mongoose }); // ✅ No .init() here
+
+client = new Client({
+  authStrategy: new RemoteAuth({
+    store,
+    clientId: sessionId,
+    backupSyncIntervalMs: 300000,
+  }),
+  puppeteer: {
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  },
+});
+
 
   client = new Client({
     authStrategy: new RemoteAuth({

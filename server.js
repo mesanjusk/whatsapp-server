@@ -47,6 +47,7 @@ async function setupWhatsApp(io, sessionId) {
 
   await mongoose.connection.asPromise();
   const store = new MongoStore({ mongoose });
+  await store.init(); //
 
   client = new Client({
     authStrategy: new RemoteAuth({

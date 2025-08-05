@@ -170,6 +170,55 @@ app.post("/whatsapp/send-test", async (req, res) => {
   }
 });
 
+app.get("/logout", async (req, res) => {
+  try {
+    if (!client) {
+      return res.status(400).send("❌ WhatsApp client is not initialized.");
+    }
+
+    await client.logout(); // Log out of WhatsApp Web
+    await client.destroy(); // Destroy the session
+    client = null;
+    latestQR = null;
+    isReady = false;
+
+    io.emit("logout", { message: "🛑 WhatsApp session has been logged out." });
+
+    res.send(`
+      <html>
+        <head>
+          <title>Logged Out</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              text-align: center;
+              padding-top: 50px;
+              background-color: #f7f7f7;
+            }
+            a {
+              display: inline-block;
+              margin-top: 20px;
+              padding: 10px 20px;
+              background: #25D366;
+              color: white;
+              text-decoration: none;
+              border-radius: 5px;
+            }
+          </style>
+        </head>
+        <body>
+          <h2>✅ WhatsApp session has been logged out</h2>
+          <a href="/qr">Scan New QR</a>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).send("🚨 Failed to logout WhatsApp session");
+  }
+});
+
+
 // ✅ Start Server
 mongoose.connect(MONGO_URI).then(() => {
   console.log("✅ MongoDB connected");

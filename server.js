@@ -47,26 +47,44 @@ async function setupSession(sessionId) {
     }),
     puppeteer: {
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+        "--disable-gpu",
+        "--window-size=1920,1080",
+        "--hide-scrollbars",
+        "--mute-audio"
+      ]
     },
   });
 
   sessions[sessionId] = { client, latestQR: null, isReady: false };
 
   client.on("qr", async (qr) => {
+    console.log("📸 QR generated for session:", sessionId);
     const imageUrl = await qrcode.toDataURL(qr);
     sessions[sessionId].latestQR = imageUrl;
     io.to(sessionId).emit("qr", imageUrl);
   });
 
+  client.on("authenticated", () => {
+    console.log(`✅ ${sessionId} authenticated`);
+  });
+
   client.on("ready", () => {
+    console.log(`💡 ${sessionId} client ready`);
     sessions[sessionId].isReady = true;
     sessions[sessionId].latestQR = null;
     io.to(sessionId).emit("ready");
   });
 
-  client.on("authenticated", () => {
-    console.log(`✅ ${sessionId} authenticated`);
+  client.on("remote_session_saved", () => {
+    console.log(`💾 ${sessionId} session saved`);
   });
 
   client.on("message", async (msg) => {
@@ -77,8 +95,8 @@ async function setupSession(sessionId) {
     io.to(sessionId).emit("message", { from, text, time });
   });
 
-  client.on("disconnected", () => {
-    console.log(`❌ ${sessionId} disconnected`);
+  client.on("disconnected", (reason) => {
+    console.log(`❌ ${sessionId} disconnected:`, reason);
     sessions[sessionId] = null;
     io.to(sessionId).emit("disconnected");
   });

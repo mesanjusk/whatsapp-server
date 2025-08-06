@@ -24,7 +24,6 @@ mongoose.connect(MONGO_URI).then(() => {
   console.error("❌ MongoDB connection error:", err);
 });
 
-// Mongoose schema
 const messageSchema = new mongoose.Schema({
   sessionId: String,
   from: String,
@@ -34,10 +33,8 @@ const messageSchema = new mongoose.Schema({
 });
 const Message = mongoose.model("Message", messageSchema);
 
-// Multi-session memory store
-const sessions = {}; // { sessionId: { client, latestQR, isReady } }
+const sessions = {};
 
-// ✅ WhatsApp session setup
 async function setupSession(sessionId) {
   if (sessions[sessionId]?.client) return;
 
@@ -89,9 +86,6 @@ async function setupSession(sessionId) {
   await client.initialize();
 }
 
-// ✅ Routes
-
-// Web QR route
 app.get("/qr/:sessionId", async (req, res) => {
   const sessionId = req.params.sessionId;
   await setupSession(sessionId);
@@ -100,7 +94,6 @@ app.get("/qr/:sessionId", async (req, res) => {
   res.send(`<html><body><h2>Scan QR for ${sessionId}</h2><img src="${qr}" width="300"/></body></html>`);
 });
 
-// JSON QR
 app.get("/api/qr/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   const qr = sessions[sessionId]?.latestQR;
@@ -108,13 +101,45 @@ app.get("/api/qr/:sessionId", (req, res) => {
   else res.status(404).json({ message: "QR not ready" });
 });
 
-// Session status
 app.get("/api/status/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   res.json({ ready: sessions[sessionId]?.isReady || false });
 });
 
-// Send message
+app.get("/api/sessions", (req, res) => {
+  const list = Object.keys(sessions).map((sessionId) => ({
+    sessionId,
+    isReady: sessions[sessionId]?.isReady || false,
+    hasQR: !!sessions[sessionId]?.latestQR,
+  }));
+  res.json(list);
+});
+
+app.get("/api/logout/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  const session = sessions[sessionId];
+  if (session?.client) {
+    await session.client.logout();
+    await session.client.destroy();
+    sessions[sessionId] = null;
+    res.json({ success: true, message: `${sessionId} logged out` });
+  } else {
+    res.status(400).json({ error: "Session not found" });
+  }
+});
+
+app.delete("/api/session/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  try {
+    await mongoose.connection.db.collection("sessions").deleteMany({ clientId: sessionId });
+    sessions[sessionId]?.client?.destroy();
+    delete sessions[sessionId];
+    res.json({ success: true, message: `${sessionId} session deleted` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/send", async (req, res) => {
   const { sessionId, number, message } = req.body;
   const session = sessions[sessionId];
@@ -131,7 +156,33 @@ app.post("/api/send", async (req, res) => {
   }
 });
 
-// ✅ Socket.io
+app.post("/api/broadcast", async (req, res) => {
+  const { message, number } = req.body;
+  const results = [];
+
+  for (const sessionId in sessions) {
+    const session = sessions[sessionId];
+    if (session?.isReady) {
+      try {
+        const sent = await session.client.sendMessage(`${number}@c.us`, message);
+        results.push({ sessionId, success: true, messageId: sent.id._serialized });
+      } catch (err) {
+        results.push({ sessionId, success: false, error: err.message });
+      }
+    } else {
+      results.push({ sessionId, success: false, error: "Session not ready" });
+    }
+  }
+
+  res.json(results);
+});
+
+app.get("/api/messages/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  const messages = await Message.find({ sessionId }).sort({ time: -1 });
+  res.json(messages);
+});
+
 io.on("connection", (socket) => {
   console.log("🔌 New socket connection");
   socket.on("join", async (sessionId) => {
@@ -143,7 +194,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ Start server
 server.listen(PORT, () => {
   console.log(`🚀 Multi-session WhatsApp server running on port ${PORT}`);
 });

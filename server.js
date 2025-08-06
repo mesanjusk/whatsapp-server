@@ -6,7 +6,11 @@ const mongoose = require("mongoose");
 const { Client, RemoteAuth } = require("whatsapp-web.js");
 const { MongoStore } = require("wwebjs-mongo");
 const qrcode = require("qrcode");
+const { default: puppeteer } = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 require("dotenv").config();
+
+puppeteer.use(StealthPlugin()); // ✅ Prevent navigation crash
 
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/whatsapp";
 const PORT = process.env.PORT || 10000;
@@ -24,6 +28,7 @@ mongoose.connect(MONGO_URI).then(() => {
   console.error("❌ MongoDB connection error:", err);
 });
 
+// Mongo message schema
 const messageSchema = new mongoose.Schema({
   sessionId: String,
   from: String,
@@ -33,6 +38,7 @@ const messageSchema = new mongoose.Schema({
 });
 const Message = mongoose.model("Message", messageSchema);
 
+// Session map
 const sessions = {};
 
 async function setupSession(sessionId) {
@@ -45,7 +51,8 @@ async function setupSession(sessionId) {
       clientId: sessionId,
       backupSyncIntervalMs: 300000,
     }),
-    puppeteer: {
+    puppeteer: puppeteer,
+    puppeteerOptions: {
       headless: true,
       args: [
         "--no-sandbox",
@@ -60,7 +67,7 @@ async function setupSession(sessionId) {
         "--hide-scrollbars",
         "--mute-audio"
       ]
-    },
+    }
   });
 
   sessions[sessionId] = { client, latestQR: null, isReady: false };
@@ -104,6 +111,7 @@ async function setupSession(sessionId) {
   await client.initialize();
 }
 
+// QR web view
 app.get("/qr/:sessionId", async (req, res) => {
   const sessionId = req.params.sessionId;
   await setupSession(sessionId);
@@ -112,6 +120,7 @@ app.get("/qr/:sessionId", async (req, res) => {
   res.send(`<html><body><h2>Scan QR for ${sessionId}</h2><img src="${qr}" width="300"/></body></html>`);
 });
 
+// QR JSON
 app.get("/api/qr/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   const qr = sessions[sessionId]?.latestQR;
@@ -119,11 +128,13 @@ app.get("/api/qr/:sessionId", (req, res) => {
   else res.status(404).json({ message: "QR not ready" });
 });
 
+// Status API
 app.get("/api/status/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   res.json({ ready: sessions[sessionId]?.isReady || false });
 });
 
+// List sessions
 app.get("/api/sessions", (req, res) => {
   const list = Object.keys(sessions).map((sessionId) => ({
     sessionId,
@@ -133,6 +144,7 @@ app.get("/api/sessions", (req, res) => {
   res.json(list);
 });
 
+// Logout
 app.get("/api/logout/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   const session = sessions[sessionId];
@@ -146,6 +158,7 @@ app.get("/api/logout/:sessionId", async (req, res) => {
   }
 });
 
+// Delete session from DB
 app.delete("/api/session/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   try {
@@ -158,6 +171,7 @@ app.delete("/api/session/:sessionId", async (req, res) => {
   }
 });
 
+// Send message
 app.post("/api/send", async (req, res) => {
   const { sessionId, number, message } = req.body;
   const session = sessions[sessionId];
@@ -174,6 +188,7 @@ app.post("/api/send", async (req, res) => {
   }
 });
 
+// Broadcast
 app.post("/api/broadcast", async (req, res) => {
   const { message, number } = req.body;
   const results = [];
@@ -195,12 +210,14 @@ app.post("/api/broadcast", async (req, res) => {
   res.json(results);
 });
 
+// Get messages
 app.get("/api/messages/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   const messages = await Message.find({ sessionId }).sort({ time: -1 });
   res.json(messages);
 });
 
+// Socket.io
 io.on("connection", (socket) => {
   console.log("🔌 New socket connection");
   socket.on("join", async (sessionId) => {

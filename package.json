@@ -1,14 +1,14 @@
 {
   "name": "whatsapp-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Multi-session WhatsApp automation backend",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -17,6 +17,8 @@
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
     "whatsapp-web.js": "^1.31.0",
-    "wwebjs-mongo": "^1.1.0"
+    "wwebjs-mongo": "^1.1.0",
+    "puppeteer-extra": "^3.3.4",
+    "puppeteer-extra-plugin-stealth": "^2.11.1"
   }
 }
